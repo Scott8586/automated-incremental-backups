@@ -16,16 +16,16 @@ The `cron` entry. (On systems that do not run continuously, using `anacron` woul
 
 The directory and file structure of `/backup/location/`.
 
-    backup_auto_2011-06-30_05:00/
-    backup_auto_2011-07-01_05:00/
-    backup_auto_2011-07-03_05:00/
-    backup_auto_2011-07-04_05:00/
-    backup_auto_current -> backup_auto_2011-07-03_05:00/
-    backup_auto.log
+    backup_2011-06-30_05:00/
+    backup_2011-07-01_05:00/
+    backup_2011-07-03_05:00/
+    backup_2011-07-04_05:00/
+    backup_current -> backup_2011-07-03_05:00/
+    backup.log
 
-Content of the log file `backup_auto.log`.
+Content of the log file `backup.log`.
 
-    2011-06-28_05:00  -  `backup_auto_current' not found.
+    2011-06-28_05:00  -  `backup_current' not found.
     2011-06-28_05:00  -  New backup created.
     -----------------------------------------------------------
     2011-06-29_05:00  -  Up to date. No backup created.
@@ -39,7 +39,7 @@ Content of the log file `backup_auto.log`.
     2011-07-03_05:00  -  Incremental backup created.
     -----------------------------------------------------------
     2011-07-04_05:00  -  Incremental backup created.
-    2011-07-04_05:00  -  Removed 'backup_auto_2011-06-28_05:00'
+    2011-07-04_05:00  -  Removed 'backup_2011-06-28_05:00'
     -----------------------------------------------------------
 
 ## Doc / help
@@ -61,7 +61,7 @@ Content of the log file `backup_auto.log`.
       -l, --no-logging      Disable automatic logging. Default is to log actions and
                               errors to `DEST/PREFIX.log'.
       -p, --prefix          Prefix backup directories and the log-file with this.
-                              Default: `backup_auto'. This also affects what files
+                              Default: `backup'. This also affects what files
                               are used for include and exclude - see `Additional
                               Information'.
       -e, --rsh             Only for use when DEST is remote! Use this command to

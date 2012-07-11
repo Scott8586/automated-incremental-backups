@@ -25,7 +25,7 @@ Mandatory arguments to long options are mandatory for short options too.
   -l, --no-logging      Disable automatic logging. Default is to log actions and
                           errors to `DEST/PREFIX.log'.
   -p, --prefix          Prefix backup directories and the log-file with this.
-                          Default: `backup_auto'. This also affects what files
+                          Default: `backup'. This also affects what files
                           are used for include and exclude - see `Additional
                           Information'.
   -e, --rsh             Only for use when DEST is remote! Use this command to
@@ -66,7 +66,7 @@ revisions=0
 # rsh=""
 args_rsync_default=("--archive")
 logging=true
-prefix="backup_auto"
+prefix="backup"
 
 # Process arguments with `getopt'.
 args_parsed=$(getopt -o hn:e:p: -l help,num-revisions:,rsh:,no-default\
@@ -110,19 +110,19 @@ shift 2
 args_rsync_user=("$@")
 
 
-#     PROCESS ARGUMENTS
-################################################################################
+#   PROCESS ARGUMENTS
+#########################
 
-date="$(date "+%Y-%m-%d_%H:%M")"
+date="$(date +%Y-%m-%d_%H:%M)"
 
 if $logging; then
-    logfile="$dest/backup_auto.log"
+    logfile="$dest/$prefix.log"
 else
     logfile="/dev/null"
 fi
 
 #   BUILD RSYNC ARGUMENTS
-########################################
+#############################
 args_rsync=("--link-dest=$dest/${prefix}_current"
             "$src"
             "$dest/${prefix}_incomplete_$date/")
@@ -130,8 +130,8 @@ args_rsync+=("${args_rsync_default[@]}")
 args_rsync+=("${args_rsync_user[@]}")
 
 # Use rsync with options
-#   '--include-from=$dest/backup_auto.include' and/or
-#   '--exclude-from=$dest/backup_auto.exclude'
+#   '--include-from=$dest/backup.include' and/or
+#   '--exclude-from=$dest/backup.exclude'
 #  if respective file exists. --include must come first!
 if [ -f "$dest/${prefix}.include" ]; then
     args_rsync+=("--include-from=$dest/${prefix}.include")
@@ -141,8 +141,8 @@ if [ -f "$dest/${prefix}.exclude" ]; then
 fi
 
 
-#     BACKUP
-################################################################################
+#   BACKUP
+##############
 
 # This is run after a backup has been created.
 post_backup() {
@@ -156,8 +156,8 @@ post_backup() {
     ln -s "${prefix}_$date" "$dest/${prefix}_current"
 }
 
-#     INITIAL BACKUP
-####################################
+#   INITIAL BACKUP
+######################
 # Check if there are any existing backups, if not - create new. Else do
 # incremental backup.
 if [[ ! -L "${dest}/${prefix}_current" ]]; then
@@ -173,8 +173,8 @@ if [[ ! -L "${dest}/${prefix}_current" ]]; then
 
     echo "$date  -  New backup created." >> "$logfile"
 
-#     INCREMENTAL BACKUP
-####################################
+#   INCREMENTAL BACKUP
+##########################
 else
 
     # Do a rsync dry-run to check for diff between SRC and last made backup.
@@ -197,8 +197,8 @@ grep '>[^d]')
 
         echo "$date  -  Incremental backup created." >> "$logfile"
 
-        #     DELETE OLD BACKUPS
-        ############################
+        #   DELETE OLD BACKUPS
+        ##########################
         # Get a list of all backups created by this script. Ordered by
         # oldest first. Matches all files named
         # `${prefix}_201Y-MM-DD_HH:SS', this is rather ugly glob;
