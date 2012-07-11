@@ -1,0 +1,233 @@
+#!/usr/bin/env bash
+
+#     ibur - Incremental Backups Using Rsync
+#
+# VERSION: 0.03
+# DATE:    2012-07-11
+# AUTHOR:  Viktor Qvarfordt, viktor.qvarfordt@gmail.com
+# HOME:    git://github.com/c3l/ibur.git
+# USAGE:
+read -d '' usage <<'EOF'
+    ibur - Incremental Backups Using Rsync v. 0.03
+Automates creation and rotation of incremental backups via rsync.
+
+Usage: ibur [OPTION]... SOURCE DEST
+
+Note: This version can only do local -> local and remote -> local backups.
+Backing up to remote is easiest done by mounting remote with sshfs or similar.
+
+Mandatory arguments to long options are mandatory for short options too.
+  -n, --num-revisions=NUM  Number of revisions to be kept. The oldest backups
+                              exceeding NUM will get deleted automatically.
+                              Default: `0=inf'.
+      -- ARG1 ARG2 ...     Separator for arguments supplied to rsync. All
+                             arguments following this option is directly passed
+                             to rsync. Useful for setting `--rsh' option to
+                             rsync when SRC is remote.
+  -d, --no-default         Do not use the pre-set arguments passed to rsync;
+                             `--archive'.
+  -l, --no-logging         Disable automatic logging. Default is to log actions
+                             and errors to `DEST/PREFIX.log'.
+  -p, --prefix=PREFIX      Prefix backup directories and log with PREFIX.
+                             Default: `backup_auto'. This also affects what
+                             files are used for include and exclude - see
+                             `Additional Information'.
+  -e, --rsh=COMMAND        The remote shell to be used for maintaining backups
+                             (rotations etc.) by this script - when DEST is
+                             remote. This will NOT get passed to rsync, use `--'
+                             for additional rsync options.
+                             Not yet implemented, mount remote with sshfs or
+                             similar insted.
+
+Additional Information:
+  - If no change at all is detected between current data and last backup
+    (`DEST/PREFIX_current'), no new backup is created.
+  - rsync options
+      `--exclude-from=DEST/PREFIX.exclude' and/or
+      `--include-from=DEST/PREFIX.include'
+    are automatically used if respective file exists.
+  - Directory structure in DEST: one directory per backup;
+    `PREFIX_YYYY-MM-DD_HH:MM' and symlink `PREFIX_current' linking to latest
+    backup.
+  - Intended to be used as a cron-job. Specifying how far back in time backups
+    are to be kept cannot be done directly; job frequency and number of
+    revisions combined specifies this.
+
+Example Usage:
+  Run as a cron job.
+  `ibur "/precious/files/" "/backup/location/" -n 8 -- -x -y'
+EOF
+
+
+#     ARGUMENT PARSING
+################################################################################
+
+# Options that can get directly manipulated by command line arguments.
+revisions=0
+# rsh=""
+args_rsync_default=("--archive")
+logging=true
+prefix="backup_auto"
+
+# Process arguments with `getopt'.
+args_parsed=$(getopt -o hn:e:p: -l help,num-revisions:,rsh:,no-default\
+,no-logging,prefix: -n "$0" -- "$@") || \
+{ echo "Try \`$0 --help' for more information."; exit 1; }
+eval set -- "$args_parsed"
+
+while [ $# -gt 0 ]
+do
+    case "$1" in
+        -h|--help)           echo "$usage"; exit 0;;
+        -n|--num-revisions)  revisions="$2"; shift;;
+      # -e|--rsh)            rsh="$2"; shift;;
+        -d|--no-default)     args_rsync_default=();;
+        -l|--no-logging)     logging=false;;
+        -p|--prefix)         prefix="$2"; shift;;
+        --)                  shift; break;;
+        *)                   echo "Internal error, argument missmatch." >&2
+                             exit 1;;
+    esac
+    shift
+done
+
+# All command line switches are now processed. Remaining arguments in `$@' are
+# now SRC, DEST and arguments to be passed directly to rsync. The two first are
+# always SRC and DEST.
+
+# Check that SRC and DEST are specified.
+if [ $# -lt 2 ]; then
+    echo "SRC and DEST are not correctly specified.
+Try \`$0 --help' for more information." >&2
+    exit 1
+fi
+
+# Preserve trailing slash on $src, but not on $dest, $dest is built dynamically.
+src="$1"
+dest="${2%/}"
+
+# All arguments following are direct rsync options.
+shift 2
+args_rsync_user=("$@")
+
+
+#     PROCESS ARGUMENTS
+################################################################################
+
+date="$(date "+%Y-%m-%d_%H:%M")"
+
+if $logging; then
+    logfile="$dest/backup_auto.log"
+else
+    logfile="/dev/null"
+fi
+
+#   BUILD RSYNC ARGUMENTS
+########################################
+args_rsync=("--link-dest=$dest/${prefix}_current"
+            "$src"
+            "$dest/${prefix}_incomplete_$date/")
+args_rsync+=("${args_rsync_default[@]}")
+args_rsync+=("${args_rsync_user[@]}")
+
+# Use rsync with options
+#   '--include-from=$dest/backup_auto.include' and/or
+#   '--exclude-from=$dest/backup_auto.exclude'
+#  if respective file exists. --include must come first!
+if [ -f "$dest/${prefix}.include" ]; then
+    args_rsync+=("--include-from=$dest/${prefix}.include")
+fi
+if [ -f "$dest/${prefix}.exclude" ]; then
+    args_rsync+=("--exclude-from=$dest/${prefix}.exclude")
+fi
+
+
+#     BACKUP
+################################################################################
+
+# This is run after a backup has been created.
+post_backup() {
+    # When the backup is complete, remove the `incomplete' indicator from the
+    # name.
+    mv "$dest/${prefix}_incomplete_$date" "$dest/${prefix}_$date"
+
+    # Update the `PREFIX_current' symlink, point it to the newly created backup.
+    # Relative path.
+    rm -f "$dest/${prefix}_current"
+    ln -s "${prefix}_$date" "$dest/${prefix}_current"
+}
+
+#     INITIAL BACKUP
+####################################
+# Check if there are any existing backups, if not - create new. Else do
+# incremental backup.
+if [[ ! -L "${dest}/${prefix}_current" ]]; then
+
+    echo "$date  -  \`${prefix}_current' not found." >> "$logfile"
+
+    # Run rsync without the first argument from the argument array, ie. the
+    # `--link-dest=..'.
+    rsync "${args_rsync[@]:1}"
+
+    # Clean up.
+    post_backup
+
+    echo "$date  -  New backup created." >> "$logfile"
+
+#     INCREMENTAL BACKUP
+####################################
+else
+
+    # Do a rsync dry-run to check for diff between SRC and last made backup.
+    changed=$(rsync "--dry-run" "--out-format=%i" "${args_rsync[@]}" | \
+grep '>[^d]')
+    # This is an empty string if no diff is found, in which case it tests
+    # false. This is basically checking if anything that is not a directory is
+    # to be transfered. (Dirs always get transfered, files can get hardlinked
+    # instead, thus no transfer required.)  See manpage for rsync, section
+    # '--itemize-changes' for more info on the output being parsed here.
+
+    # If diff is detected, go on with the backup. If not, do nothing.
+    if [ -n "$changed" ]; then
+
+        # Run rsync, backup will be called `${prefix}_incomplete_$date'.
+        rsync "${args_rsync[@]}"
+
+        # Clean up.
+        post_backup
+
+        echo "$date  -  Incremental backup created." >> "$logfile"
+
+        #     DELETE OLD BACKUPS
+        ############################
+        # Get a list of all backups created by this script. Ordered by
+        # oldest first. Matches all files named
+        # `${prefix}_201Y-MM-DD_HH:SS', this is rather ugly glob;
+        bkps=($dest/${prefix}_201[[:digit:]]-[[:digit:]][[:digit:]]-\
+[[:digit:]][[:digit:]]_[[:digit:]][[:digit:]]:[[:digit:]][[:digit:]])
+
+        # Let num_old=0 if revisions < existing backups.
+        if [ $revisions -lt ${#bkps[@]} ]; then
+            num_old=$[${#bkps[@]} - $revisions]
+        else
+            num_old=0
+        fi
+
+        bkps_old=("${bkps[@]:0:$num_old}")
+
+        # Delete the old backups.
+        for bkp in "${bkps_old[@]}"; do
+            rm -rf "$bkp"
+            echo "$date  -  Removed '$(basename "$bkp")'" >> "$logfile"
+        done
+
+    else
+
+        echo "$date  -  Up to date. No backup created." >> "$logfile"
+
+    fi
+fi
+
+echo "-----------------------------------------------------------" >> "$logfile"
+
+exit 0
