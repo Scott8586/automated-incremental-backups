@@ -53,27 +53,27 @@ Content of the log file `backup.log`.
     Backing up to remote is easiest done by mounting remote with sshfs or similar.
 
     Mandatory arguments to long options are mandatory for short options too.
-      -n, --num-revisions   Number of revisions to be kept. The oldest backups
-                               exceeding NUM will get deleted automatically.
-                               Default: `0=inf'.
-      -d, --no-default      Do not use the pre-set arguments passed to rsync;
-                              `--archive'.
-      -l, --no-logging      Disable automatic logging. Default is to log actions and
-                              errors to `DEST/PREFIX.log'.
-      -p, --prefix          Prefix backup directories and the log-file with this.
-                              Default: `backup'. This also affects what files
-                              are used for include and exclude - see `Additional
-                              Information'.
-      -e, --rsh             Only for use when DEST is remote! Use this command to
-                              log in to the remote shell. This is used for
-                              maintaining backups (rotations etc.) This will NOT get
-                              passed to rsync, use `--' for additional rsync
-                              options. Also.. this is not yet implemented :) mount
-                              remote with sshfs or similar insted.
-      -- ARG1 ARG2 ...      Separator for arguments supplied to rsync. All arguments
-                              following this option are directly passed to
-                              rsync. Useful for setting `--rsh' option to rsync when
-                              SRC is remote.
+      -n, --num-revisions=NUM  Number of revisions to be kept. The oldest backups
+                                 exceeding NUM will get deleted automatically.
+                                 Default: `0=inf'.
+      -d, --no-default         Do not use the pre-set arguments passed to rsync;
+                                 `--archive'.
+      -l, --no-logging         Disable automatic logging. Default is to log actions
+                                 and errors to `DEST/PREFIX.log'.
+      -p, --prefix=PREFIX      Prefix backup directories and the log-file with
+                                 this. Default: `backup'. This also affects what
+                                 files are used for include and exclude -- see
+                                 `Additional Information'.
+      -e, --rsh=COMMAND        Only for use when DEST is remote! Use this command to
+                                 log in to the remote shell. This is used for
+                                 maintaining backups (rotations etc.) This will NOT
+                                 get passed to rsync, use `--' for additional rsync
+                                 options. Also.. this is not yet implemented :)
+                                 mount remote with sshfs or similar insted.
+      -- ARG1 ARG2 ...         Separator for arguments supplied to rsync. All
+                                 arguments following this option are directly passed
+                                 to rsync. Useful for setting `--rsh' option to
+                                 rsync when SRC is remote.
 
     Additional Information:
       - If no change at all is detected between current data and last made backup
@@ -91,7 +91,6 @@ Content of the log file `backup.log`.
 
     Example Usage:
       `ibur /precious/files/ /backup/location/ -n 8 -- -x -y'
-
 
 ## ToDo
 
