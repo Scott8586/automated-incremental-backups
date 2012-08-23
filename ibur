@@ -28,12 +28,6 @@ Mandatory arguments to long options are mandatory for short options too.
                              this. Default: `backup'. This also affects what
                              files are used for include and exclude -- see
                              `Additional Information'.
-  -e, --rsh=COMMAND        Only for use when DEST is remote! Use this command to
-                             log in to the remote shell. This is used for
-                             maintaining backups (rotations etc.) This will NOT
-                             get passed to rsync, use `--' for additional rsync
-                             options. Also.. this is not yet implemented :)
-                             mount remote with sshfs or similar insted.
   -- ARG1 ARG2 ...         Separator for arguments supplied to rsync. All
                              arguments following this option are directly passed
                              to rsync. Useful for setting `--rsh' option to
@@ -41,20 +35,20 @@ Mandatory arguments to long options are mandatory for short options too.
 
 Additional Information:
   - If no change at all is detected between current data and last made backup
-    (`DEST/PREFIX_current'), then no new backup is created.
+    (`DEST/PREFIX_latest'), then no new backup is created.
   - rsync options
       `--exclude-from=DEST/PREFIX.exclude' and/or
       `--include-from=DEST/PREFIX.include'
     are automatically used if respective file exists.
   - Directory structure in DEST: one directory per backup;
-    `PREFIX_YYYY-MM-DD_HH:MM' and symlink `PREFIX_current' linking to latest
+    `PREFIX_YYYY-MM-DD_HH:MM' and symlink `PREFIX_latest' linking to latest
     backup.
   - Specifying how far back in time backups are to be kept cannot be done
     directly, only the number of backups can be specified. The frequency of
     backing up is specified when running cron.
 
 Example Usage:
-  `ibur /precious/files/ /backup/location/ -n 8 -- -x -y'
+  `ibur /precious/files/ /backup/location/ -n 8 -- <extra commands to rsync>'
 EOF
 
 
@@ -62,7 +56,7 @@ EOF
 ########################
 
 # Options that can get directly manipulated by command line arguments.
-revisions=0
+num_revisions=0
 # rsh=""
 args_rsync_default=("--archive")
 logging=true
@@ -78,7 +72,7 @@ while [ $# -gt 0 ]
 do
     case "$1" in
         -h|--help)           echo "$usage"; exit 0;;
-        -n|--num-revisions)  revisions="$2"; shift;;
+        -n|--num-revisions)  num_revisions="$2"; shift;;
       # -e|--rsh)            rsh="$2"; shift;;
         -d|--no-default)     args_rsync_default=();;
         -l|--no-logging)     logging=false;;
@@ -89,6 +83,15 @@ do
     esac
     shift
 done
+
+# that `-e' swich is for the future, disabled for now.
+# -e, --rsh=COMMAND        Only for use when DEST is remote! Use this command to
+#                            log in to the remote shell. This is used for
+#                            maintaining backups (rotations etc.) This will NOT
+#                            get passed to rsync, use `--' for additional rsync
+#                            options. Also.. this is not yet implemented :)
+#                            mount remote with sshfs or similar insted.
+
 
 # All command line switches are now processed. Remaining arguments in `$@' are
 # now SRC, DEST and arguments to be passed directly to rsync. The two first are
@@ -101,13 +104,14 @@ Try \`$0 --help' for more information." >&2
     exit 1
 fi
 
-# Preserve trailing slash on $src, but not on $dest, $dest is built dynamically.
+# Preserve trailing slash on $src, but not on $dest, we ensure trailing slash on $dest.
+# Thats the only thing that makes sense.
 src="$1"
 dest="${2%/}"
 
 # Ensure existence of $dest.
 if [ ! -d "$dest" ]; then
-    mkdir "$dest"
+    mkdir -p "$dest"
 fi
 
 # All arguments following are direct rsync options.
@@ -128,7 +132,7 @@ fi
 
 #   BUILD RSYNC ARGUMENTS
 #############################
-args_rsync=("--link-dest=$dest/${prefix}_current"
+args_rsync=("--link-dest=$dest/${prefix}_latest"
             "$src"
             "$dest/${prefix}_incomplete_$date/")
 args_rsync+=("${args_rsync_default[@]}")
@@ -153,21 +157,22 @@ fi
 post_backup() {
     # When the backup is complete, remove the `incomplete' indicator from the
     # name.
+
     mv "$dest/${prefix}_incomplete_$date" "$dest/${prefix}_$date"
 
-    # Update the `PREFIX_current' symlink, point it to the newly created backup.
+    # Update the `PREFIX_latest' symlink, point it to the newly created backup.
     # Relative path.
-    rm -f "$dest/${prefix}_current"
-    ln -s "${prefix}_$date" "$dest/${prefix}_current"
+    rm -f "$dest/${prefix}_latest"
+    ln -s "${prefix}_$date" "$dest/${prefix}_latest"
 }
 
 #   INITIAL BACKUP
 ######################
 # Check if there are any existing backups, if not - create new. Else do
 # incremental backup.
-if [[ ! -L "${dest}/${prefix}_current" ]]; then
+if [[ ! -L "${dest}/${prefix}_latest" ]]; then
 
-    echo "$date  -  \`${prefix}_current' not found." >> "$logfile"
+    echo "$date  -  \`${prefix}_latest' not found." >> "$logfile"
 
     # Run rsync without the first argument from the argument array, ie. the
     # `--link-dest=..'.
@@ -210,14 +215,16 @@ grep '>[^d]')
         bkps=($dest/${prefix}_201[[:digit:]]-[[:digit:]][[:digit:]]-\
 [[:digit:]][[:digit:]]_[[:digit:]][[:digit:]]:[[:digit:]][[:digit:]])
 
-        # Let num_old=0 if revisions < existing backups.
-        if [ $revisions -lt ${#bkps[@]} ]; then
-            num_old=$[${#bkps[@]} - $revisions]
-        else
-            num_old=0
+        # Let num_old_backups=0 if num_revisions < existing backups.
+        if [ $num_revisions -eq 0 ]; then  # Never remove old backups if $num_revisions = 0.
+            num_old_backups=0
+        elif [ ${#bkps[@]} -gt $num_revisions ]; then
+            num_old_backups=$[${#bkps[@]} - $num_revisions]
+        else  # We have no old backups.
+            num_old_backups=0
         fi
 
-        bkps_old=("${bkps[@]:0:$num_old}")
+        bkps_old=("${bkps[@]:0:$num_old_backups}")
 
         # Delete the old backups.
         for bkp in "${bkps_old[@]}"; do
