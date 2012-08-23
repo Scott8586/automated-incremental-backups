@@ -2,8 +2,8 @@
 
 #     ibur - Incremental Backups Using Rsync
 #
-# VERSION: 0.03
-# DATE:    2012-07-11
+# VERSION: 0.1
+# DATE:    2012-08-23
 # AUTHOR:  Viktor Qvarfordt, viktor.qvarfordt@gmail.com
 # HOME:    git://github.com/c3l/ibur.git
 # USAGE:
@@ -17,6 +17,7 @@ Note: This version can only do local -> local and remote -> local backups.
 Backing up to remote is easiest done by mounting remote with sshfs or similar.
 
 Mandatory arguments to long options are mandatory for short options too.
+  -h, --help               Show this help message.
   -n, --num-revisions=NUM  Number of revisions to be kept. The oldest backups
                              exceeding NUM will get deleted automatically.
                              Default: `0=inf'.
@@ -52,20 +53,18 @@ Example Usage:
 EOF
 
 
-#   ARGUMENT PARSING
-########################
+# PARSE COMMAND LINE ARGUMENTS
+###############################
 
 # Options that can get directly manipulated by command line arguments.
 num_revisions=0
-# rsh=""
 args_rsync_default=("--archive")
 logging=true
 prefix="backup"
 
 # Process arguments with `getopt'.
-args_parsed=$(getopt -o hn:e:p: -l help,num-revisions:,rsh:,no-default\
-,no-logging,prefix: -n "$0" -- "$@") || \
-{ echo "Try \`$0 --help' for more information."; exit 1; }
+args_parsed=$(getopt -o hn:dlp: -l help,num-revisions:,no-default,no-logging,prefix: -n ibur -- "$@") || \
+{ echo "See '--help' for more information."; exit 1; }
 eval set -- "$args_parsed"
 
 while [ $# -gt 0 ]
@@ -100,14 +99,26 @@ done
 # Check that SRC and DEST are specified.
 if [ $# -lt 2 ]; then
     echo "SRC and DEST are not correctly specified.
-Try \`$0 --help' for more information." >&2
+See '--help' for more information." >&2
     exit 1
 fi
 
-# Preserve trailing slash on $src, but not on $dest, we ensure trailing slash on $dest.
-# Thats the only thing that makes sense.
+# Preserve trailing slash from user input on $src. On $dest we ensure
+# always trailing slash, thats the only thing that makes sense.
+
+absolutize_path() {
+    case "$1" in
+        /*) path="$1" ;;
+        *)  path="$(pwd)/$1" ;;
+    esac
+    echo "$(readlink -f "$path")"
+}
+
 src="$1"
-dest="${2%/}"
+dest="${2%/}"  # Ensure trailing slash.
+
+src="$(absolutize_path "$src")"
+dest="$(absolutize_path "$dest")"
 
 # Ensure existence of $dest.
 if [ ! -d "$dest" ]; then
@@ -118,10 +129,6 @@ fi
 shift 2
 args_rsync_user=("$@")
 
-
-#   PROCESS ARGUMENTS
-#########################
-
 date="$(date +%Y-%m-%d_%H:%M)"
 
 if $logging; then
@@ -130,18 +137,18 @@ else
     logfile="/dev/null"
 fi
 
-#   BUILD RSYNC ARGUMENTS
-#############################
-args_rsync=("--link-dest=$dest/${prefix}_latest"
+# BUILD RSYNC ARGUMENTS
+########################
+args_rsync=("--link-dest=$dest/${prefix}_latest/"
             "$src"
-            "$dest/${prefix}_incomplete_$date/")
-args_rsync+=("${args_rsync_default[@]}")
-args_rsync+=("${args_rsync_user[@]}")
+            "$dest/${prefix}_$date_incomplete/"
+            "${args_rsync_default[@]}"
+            "${args_rsync_user[@]}")
 
-# Use rsync with options
-#   '--include-from=$dest/backup.include' and/or
-#   '--exclude-from=$dest/backup.exclude'
-#  if respective file exists. --include must come first!
+# Use rsync with following options
+#  --include-from=$dest/backup.include and/or
+#  --exclude-from=$dest/backup.exclude
+# if respective file exists.  --include must come first!
 if [ -f "$dest/${prefix}.include" ]; then
     args_rsync+=("--include-from=$dest/${prefix}.include")
 fi
@@ -150,46 +157,25 @@ if [ -f "$dest/${prefix}.exclude" ]; then
 fi
 
 
-#   BACKUP
-##############
+# BACKUP
+#########
 
-# This is run after a backup has been created.
-post_backup() {
-    # When the backup is complete, remove the `incomplete' indicator from the
-    # name.
-
-    mv "$dest/${prefix}_incomplete_$date" "$dest/${prefix}_$date"
-
-    # Update the `PREFIX_latest' symlink, point it to the newly created backup.
-    # Relative path.
-    rm -f "$dest/${prefix}_latest"
-    ln -s "${prefix}_$date" "$dest/${prefix}_latest"
+log() { # Helper function to output to logfile.
+    echo "$(date '+%F %T') - $1" >> "$logfile"
 }
 
-#   INITIAL BACKUP
-######################
-# Check if there are any existing backups, if not - create new. Else do
-# incremental backup.
-if [[ ! -L "${dest}/${prefix}_latest" ]]; then
-
-    echo "$date  -  \`${prefix}_latest' not found." >> "$logfile"
-
-    # Run rsync without the first argument from the argument array, ie. the
-    # `--link-dest=..'.
+standalone_backup() { # Plain and simple copy of SRC, used for first backup.
+    log "\`${prefix}_latest' not found."
+    # Run rsync without the '--link-dest' argument, it is the first
+    # element in the arg array.
     rsync "${args_rsync[@]:1}"
-
-    # Clean up.
     post_backup
+    log "New backup created."
+}
 
-    echo "$date  -  New backup created." >> "$logfile"
-
-#   INCREMENTAL BACKUP
-##########################
-else
-
-    # Do a rsync dry-run to check for diff between SRC and last made backup.
-    changed=$(rsync "--dry-run" "--out-format=%i" "${args_rsync[@]}" | \
-grep '>[^d]')
+incremental_backup() { # The fun stuff, although trivial.
+    # Do an rsync dry-run to check for diff between SRC and last made backup.
+    changed=$(rsync --dry-run --out-format=%i "${args_rsync[@]}" | grep '>[^d]')
     # This is an empty string if no diff is found, in which case it tests
     # false. This is basically checking if anything that is not a directory is
     # to be transfered. (Dirs always get transfered, files can get hardlinked
@@ -198,47 +184,62 @@ grep '>[^d]')
 
     # If diff is detected, go on with the backup. If not, do nothing.
     if [ -n "$changed" ]; then
-
-        # Run rsync, backup will be called `${prefix}_incomplete_$date'.
-        rsync "${args_rsync[@]}"
-
-        # Clean up.
+        rsync "${args_rsync[@]}"  # Backup will be called `${prefix}_$date_incomplete'.
         post_backup
+        log "Incremental backup created."
+        delete_old_backups
+    else
+        log "Up to date. No backup created."
+    fi
+}
 
-        echo "$date  -  Incremental backup created." >> "$logfile"
+post_backup() { # This is run after a backup has been created.
+    # When the backup is complete we remove the `incomplete' indicator from the
+    # name. Because we have minute resolution, backups being taken within the
+    # same minute will replace each other. Doing backups this often is
+    # pointless and thus not supported.
+    rm -rf "$dest/${prefix}_$date"
+    mv "$dest/${prefix}_$date_incomplete" "$dest/${prefix}_$date"
+    # Update the `PREFIX_latest' symlink, point it to the newly created backup
+    # with a relative path.
+    ln -sf "${prefix}_$date" "$dest/${prefix}_latest"
+}
 
-        #   DELETE OLD BACKUPS
-        ##########################
-        # Get a list of all backups created by this script. Ordered by
-        # oldest first. Matches all files named
-        # `${prefix}_201Y-MM-DD_HH:SS', this is rather ugly glob;
-        bkps=($dest/${prefix}_201[[:digit:]]-[[:digit:]][[:digit:]]-\
+delete_old_backups() {
+        # Get a list of all backups created by this script. Ordered by oldest
+        # first. Matches all files named
+        # `${prefix}_201Y-MM-DD_HH:SS', the pattern used for matching is rather ugly:
+        bkps=(${dest}/${prefix}_201[[:digit:]]-[[:digit:]][[:digit:]]-\
 [[:digit:]][[:digit:]]_[[:digit:]][[:digit:]]:[[:digit:]][[:digit:]])
-
+        # Now we filter out the old ones.
         # Let num_old_backups=0 if num_revisions < existing backups.
-        if [ $num_revisions -eq 0 ]; then  # Never remove old backups if $num_revisions = 0.
+        if [ $num_revisions -le 0 ]; then # Never remove old backups if $num_revisions =< 0.
             num_old_backups=0
-        elif [ ${#bkps[@]} -gt $num_revisions ]; then
+        elif [ ${#bkps[@]} -lt $num_revisions ]; then # We have no old backups.
+            num_old_backups=0
+        else
             num_old_backups=$[${#bkps[@]} - $num_revisions]
-        else  # We have no old backups.
-            num_old_backups=0
         fi
-
+        # This assumes that $bkps are ordered with oldes first, does the pattern
+        # matching ensure this? This is a potential bug!
         bkps_old=("${bkps[@]:0:$num_old_backups}")
-
         # Delete the old backups.
         for bkp in "${bkps_old[@]}"; do
             rm -rf "$bkp"
-            echo "$date  -  Removed '$(basename "$bkp")'" >> "$logfile"
+            log "Removed '$(basename "$bkp")'"
         done
+}
 
+
+main() {
+    # Checks if there are any existing backups.
+    if [[ ! -L "${dest}/${prefix}_latest" ]]; then
+        standalone_backup
     else
-
-        echo "$date  -  Up to date. No backup created." >> "$logfile"
-
+        incremental_backup
     fi
-fi
+    echo "-----------------------------------------------------------" >> "$logfile"
+}
 
-echo "-----------------------------------------------------------" >> "$logfile"
-
+main
 exit 0

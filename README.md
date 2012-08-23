@@ -2,15 +2,27 @@
 
 ## Installation
 
-I like to keep cloned repositories in `~/vc/` (**v**ersion
-**c**ontrol). So I use this program by doing
+Since the program is just one file, you could simply download it from
+[here](https://raw.github.com/c3l/ibur/master/ibur). Alternatively you
+can clone this repository, this enables you to easily get future
+updates.
+
+I like to keep cloned repositories in `~/vc/` (Version Control). So I
+use this program by cloning the repo like this:
 
     cd ~/vc/ && git clone git://github.com/c3l/ibur.git
 
-Then I put a symlink in `/usr/local/bin/` so that I can call `ibur`
-just like any command.
+Then put a symlink in `/usr/local/bin/`:
 
     ln -s ~/vc/ibur/ibur /usr/local/bin/
+
+so that you can run the command `ibur` from any directory, just like any
+other command.
+
+In the future you keep up to date by doing
+
+    cd ~/vc/ibur && git pull
+
 
 ## About
 
@@ -38,13 +50,15 @@ do not get copied. Copying them would create duplicate files from what
 we have in the previous backup, instead a hardlink is created for each
 unmodified file (and folder) to the previous backup. (Don't know what
 a hardlink is? Don't worry, just think of it like the same file at two
-places, remove one and the "other" gets removed too.) This is so that
-we won't use more space that we need to on our hard drive. All this
-happens thanks to `rsync`.
+places, change one and the "other" gets changed too.) This is so that
+we won't use more space that we need to on our hard drive, and having
+two copies of the same file is pointless. All this happens thanks to
+`rsync`.
 
 This program also creates a logfile in `/backup/location/backup.log`
 that logs what is going on, this is useful when automatin this
 program, see Usage example below.
+
 
 ## Usage example
 
@@ -81,7 +95,10 @@ Content of the log file `backup.log`.
     2011-07-04_05:00  -  Removed 'backup_2011-06-28_05:00'
     -----------------------------------------------------------
 
+
 ## Doc / help
+
+The output of `ibur --help` is listed here.
 
         ibur - Incremental Backups Using Rsync v. 0.03
     Automates creation and rotation of incremental backups via rsync.
@@ -92,6 +109,7 @@ Content of the log file `backup.log`.
     Backing up to remote is easiest done by mounting remote with sshfs or similar.
 
     Mandatory arguments to long options are mandatory for short options too.
+      -h, --help               Show this help message.
       -n, --num-revisions=NUM  Number of revisions to be kept. The oldest backups
                                  exceeding NUM will get deleted automatically.
                                  Default: `0=inf'.
@@ -125,9 +143,14 @@ Content of the log file `backup.log`.
     Example Usage:
       `ibur /precious/files/ /backup/location/ -n 8 -- <extra commands to rsync>'
 
-## To do
 
-* Add support for specifying how far in back in time backups should be stored.
-  Currently it is only possible to specify the number of backups to be kept.
-* Add support for local -> remote backups, this is rather problematic, rsnapshot
-  struggles witht he same issue. Mount remote with sshfs or similar instead.
+## Change log
+
+- **v 0.1** 2012-08-23
+  - Bugfix: `-n` swich now works properly.
+  - Bugfix: relative paths now work as expected.
+  - Changed name for symlink to latest backup from `backup_current`
+    to `backup_latest`.
+  - Improved documentation and readme.
+  - Refactored code, much easier to work with now.
+  - Moved todo and bugs etc. to the github issues page.
