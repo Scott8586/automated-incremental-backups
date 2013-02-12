@@ -1,17 +1,17 @@
 #!/usr/bin/env bash
 
-#     ibur - Incremental Backups Using Rsync
+#     ibr - Incremental Backups Using Rsync
 #
-# VERSION: 0.1
+# VERSION: 0.1.1
 # DATE:    2012-08-23
 # AUTHOR:  Viktor Qvarfordt, viktor.qvarfordt@gmail.com
-# HOME:    git://github.com/c3l/ibur.git
+# HOME:    git://github.com/c3l/ibr.git
 # USAGE:
 read -d '' usage <<'EOF'
-    ibur - Incremental Backups Using Rsync v. 0.03
+    ibr - Incremental Backups Using Rsync v. 0.1.1
 Automates creation and rotation of incremental backups via rsync.
 
-Usage: ibur [OPTION]... SOURCE DEST
+Usage: ibr [OPTION]... SOURCE DEST
 
 Note: This version can only do local -> local and remote -> local backups.
 Backing up to remote is easiest done by mounting remote with sshfs or similar.
@@ -49,7 +49,7 @@ Additional Information:
     backing up is specified when running cron.
 
 Example Usage:
-  `ibur /precious/files/ /backup/location/ -n 8 -- <extra commands to rsync>'
+  `ibr /precious/files/ /backup/location/ -n 8 -- <extra commands to rsync>'
 EOF
 
 
@@ -63,7 +63,7 @@ logging=true
 prefix="backup"
 
 # Process arguments with `getopt'.
-args_parsed=$(getopt -o hn:dlp: -l help,num-revisions:,no-default,no-logging,prefix: -n ibur -- "$@") || \
+args_parsed=$(getopt -o hn:dlp: -l help,num-revisions:,no-default,no-logging,prefix: -n ibr -- "$@") || \
 { echo "See '--help' for more information."; exit 1; }
 eval set -- "$args_parsed"
 

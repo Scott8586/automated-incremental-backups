@@ -1,44 +1,30 @@
-# Incremental Backups Using Rsync
+# ibr
+
+_Automated **I**ncremental **B**ackups using **R**sync_
 
 ## Installation
 
-Since the program is just one file, you could simply download it from
-[here](https://raw.github.com/c3l/ibur/master/ibur). Alternatively you
-can clone this repository, this enables you to easily get future
-updates.
-
-I like to keep cloned repositories in `~/vc/` (Version Control). So I
-use this program by cloning the repo like this:
-
-    cd ~/vc/ && git clone git://github.com/c3l/ibur.git
-
-Then put a symlink in `/usr/local/bin/`:
-
-    ln -s ~/vc/ibur/ibur /usr/local/bin/
-
-so that you can run the command `ibur` from any directory, just like any
-other command.
-
-In the future you keep up to date by doing
-
-    cd ~/vc/ibur && git pull
-
+The program is just one file, no installation needed. You could simply
+[download it](https://raw.github.com/c3l/ibr/master/ibr), or clone
+this repository, this enables you to easily get future updates.
 
 ## About
 
 * Implemented in Bash.
 * Uses rsync.
 * [Incremental backups](http://en.wikipedia.org/wiki/Incremental_backup).
-* Automatic rotations and log-keeping.
+* Automatic rotations, timestamps and log-keeping.
 * Lightweight, no install.
-* Easy to configure, designed for use with cron.
+* Easy to configure, easy to use with cron.
 
-Usage is simple: `ibur /precious/files/ /backup/location/`, this will
-create a copy of the files in `/precious/files/` inside
-`/backup/location/backup_2012-08-23_17:52/`. That exact command can be
-executed multiple times to create a new backup backup. A symlink is
-created in`/backup/location/backup_latest` -- that points to the
-most recent backup.
+## Usage
+
+Usage is simple: `ibr /precious/files/ /backup/location/` will create
+a copy of the files from `/precious/files/` to
+`/backup/location/backup_2013-02-12_17:52/`. The same command is used
+each time you want to create a new backup backup. For convenience, a
+symlink is created in`/backup/location/backup_latest` which points to
+the most recent backup.
 
 What makes this program really useful is that after a first backup has
 been made, each successive backup is an incremental backup. This means
@@ -46,28 +32,39 @@ that no more data is copied than what is needed. Lets say we have 5
 files, we run a backup. Then we modify one of those files, and create
 a new file. Now we want to backup again; the modified file and the new
 file gets copied into the backup location, but the 4 unmodified files
-do not get copied. Copying them would create duplicate files from what
-we have in the previous backup, instead a hardlink is created for each
-unmodified file (and folder) to the previous backup. (Don't know what
-a hardlink is? Don't worry, just think of it like the same file at two
-places, change one and the "other" gets changed too.) This is so that
-we won't use more space that we need to on our hard drive, and having
-two copies of the same file is pointless. All this happens thanks to
-`rsync`.
+do not get copied. Copying the unmodified files to the new backup
+would create unnecessary duplicates of the files, eating disk
+space. But don't worry; *each backup is fully complete and contains
+all files*.
+
+This is achieved by creating hardlinks for each unmodified file (and
+folder) to the last backed up version of that file. (Don't know what a
+hardlink is? Don't worry, just think of it like the same file at two
+places, change one and the "other" gets changed too.) This minimizes
+use of disk space — having two copies of the same file is
+pointless. All this happens thanks to `rsync`.
 
 This program also creates a logfile in `/backup/location/backup.log`
-that logs what is going on, this is useful when automatin this
-program, see Usage example below.
+that logs what is going on, this is useful when automating this
+program, see the example below.
 
 
-## Usage example
+## Example
 
-The `cron` entry. (On systems that do not run continuously, using `anacron` would be more convenient.)
+The `cron` entry.
 
     # m h  dom mon dow   command
-    00 05 * * * ibur /precious/files/ /backup/location/
+    00 05 * * * /path/to/ibr /precious/files/ /backup/location/
 
-The directory and file structure of `/backup/location/`.
+If your system isn't running continuously, create a file
+`/etc/cron.daily/autobackup` containing: (don't forget to `chmod +x`
+the file.)
+
+    #!/bin/sh
+    /path/to/ibr /precious/files/ /backup/location/
+
+The directory and file structure of `/backup/location/` created after
+running `ibr` a couple of times:
 
     backup_2011-06-30_05:00/
     backup_2011-07-01_05:00/
@@ -98,12 +95,12 @@ Content of the log file `backup.log`.
 
 ## Doc / help
 
-The output of `ibur --help` is listed here.
+The output of `ibr --help` is listed here.
 
-        ibur - Incremental Backups Using Rsync v. 0.03
+        ibr - Incremental Backups Using Rsync v. 0.1.1
     Automates creation and rotation of incremental backups via rsync.
 
-    Usage: ibur [OPTION]... SOURCE DEST
+    Usage: ibr [OPTION]... SOURCE DEST
 
     Note: This version can only do local -> local and remote -> local backups.
     Backing up to remote is easiest done by mounting remote with sshfs or similar.
@@ -141,10 +138,14 @@ The output of `ibur --help` is listed here.
         backing up is specified when running cron.
 
     Example Usage:
-      `ibur /precious/files/ /backup/location/ -n 8 -- <extra commands to rsync>'
+      `ibr /precious/files/ /backup/location/ -n 8 -- <extra commands to rsync>'
 
 
 ## Change log
+
+- **v 0.1.1** 2013-02-12
+  - [Semantic versioning](http://semver.org/).
+  - Improved `README.md`.
 
 - **v 0.1** 2012-08-23
   - Bugfix: `-n` swich now works properly.
