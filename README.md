@@ -4,9 +4,9 @@ _Automated **I**ncremental **B**ackups using **R**sync_
 
 ## Installation
 
-The program is just one file, no installation needed. You could simply
+The program is just one file, no installation needed. You can simply
 [download it](https://raw.github.com/c3l/ibr/master/ibr), or clone
-this repository, this enables you to easily get future updates.
+this repository.
 
 ## About
 
@@ -17,7 +17,7 @@ this repository, this enables you to easily get future updates.
 * Lightweight, no install.
 * Easy to configure, easy to use with cron.
 
-## Usage
+## Usage and functionality
 
 Usage is simple: `ibr /precious/files/ /backup/location/` will create
 a copy of the files from `/precious/files/` to
